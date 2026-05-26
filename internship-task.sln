@@ -3,12 +3,12 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.13.35825.156
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "service1", "..\..\service1\service1\service1.csproj", "{D6AB2151-AACD-B10F-17FF-8CA9E0909051}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Элементы решения", "Элементы решения", "{754FC069-D67B-A9D7-50A1-8D1CA196D8F1}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "service1", "Service1.Generator\service1.csproj", "{6BA2E820-8048-F535-A290-CC5F12532341}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,10 +16,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{D6AB2151-AACD-B10F-17FF-8CA9E0909051}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D6AB2151-AACD-B10F-17FF-8CA9E0909051}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D6AB2151-AACD-B10F-17FF-8CA9E0909051}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D6AB2151-AACD-B10F-17FF-8CA9E0909051}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BA2E820-8048-F535-A290-CC5F12532341}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BA2E820-8048-F535-A290-CC5F12532341}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BA2E820-8048-F535-A290-CC5F12532341}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BA2E820-8048-F535-A290-CC5F12532341}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
