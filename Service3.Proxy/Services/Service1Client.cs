@@ -1,12 +1,26 @@
-namespace Service3.Proxy;
+namespace Service3.Proxy.Services;
 
-public class WeatherForecast
+public class Service1Client : IService1Client
 {
-    public DateOnly Date { get; set; }
+    private readonly HttpClient _httpClient;
 
-    public int TemperatureC { get; set; }
+    public Service1Client(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
 
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public async Task<List<Service1ItemDto>> GetLatestItemsAsync(int count)
+    {
+        var response = await _httpClient.GetAsync(
+            $"/api/items/latest?count={count}");
 
-    public string? Summary { get; set; }
+        response.EnsureSuccessStatusCode();
+
+        var data = await response.Content.ReadFromJsonAsync<List<Service1ItemDto>>();
+
+        if (data == null)
+            return new List<Service1ItemDto>();
+        else return data;
+    }
 }
+

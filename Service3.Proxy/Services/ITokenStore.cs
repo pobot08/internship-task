@@ -1,4 +1,4 @@
-namespace Service3.Proxy;
+namespace Service3.Proxy.Services;
 
 public class WeatherForecast
 {

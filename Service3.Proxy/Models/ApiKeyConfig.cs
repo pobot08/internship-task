@@ -1,12 +1,8 @@
-namespace Service3.Proxy;
+namespace Service3.Proxy.Models;
 
-public class WeatherForecast
+public class ApiKeyConfig
 {
-    public DateOnly Date { get; set; }
+    public string Key { get; set; } = string.Empty;
 
-    public int TemperatureC { get; set; }
-
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-
-    public string? Summary { get; set; }
+    public int TokenLimit { get; set; } 
 }
