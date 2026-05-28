@@ -1,12 +1,16 @@
-namespace Service3.Proxy;
+using Service3.Proxy.Services
 
-public class WeatherForecast
+namespace Service3.Proxy.Models;
+
+public class Service1ItemDto
 {
-    public DateOnly Date { get; set; }
+    public Guid Id { get; set; }
 
-    public int TemperatureC { get; set; }
+    public string Payload { get; set; } = string.Empty;
 
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public int Value { get; set; }
 
-    public string? Summary { get; set; }
+    public decimal AdditionValue { get; set; }
+
+    public DateTime DataValue { get; set; }
 }

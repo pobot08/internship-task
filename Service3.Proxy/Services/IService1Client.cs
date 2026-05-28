@@ -1,12 +1,9 @@
-namespace Service3.Proxy;
+using Service3.Proxy.Models;
+namespace Service3.Proxy.Services;
 
-public class WeatherForecast
+public interface IService1Client 
 {
-    public DateOnly Date { get; set; }
-
-    public int TemperatureC { get; set; }
-
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-
-    public string? Summary { get; set; }
+    Task<List<Service1ItemDto>> GetLatestItemsAsync(int count);
 }
+
+

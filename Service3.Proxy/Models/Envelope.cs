@@ -1,12 +1,15 @@
-namespace Service3.Proxy;
+namespace Service3.Proxy.Models;
 
-public class WeatherForecast
+public class Envelope
 {
-    public DateOnly Date { get; set; }
+    public string SourceBatchId { get; set; } = string.Empty;
 
-    public int TemperatureC { get; set; }
+    public DateTime TransformedAt { get; set; }
 
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public int ItemsCount { get; set; }
 
-    public string? Summary { get; set; }
+    public int TokensUsed { get; set; }
+
+    public int TokensRemaining { get; set; }
 }
+
