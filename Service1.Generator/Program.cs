@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using service1.Data;
+using service1.Models;
 using service1.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,6 +10,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<DataGenerator>();
+builder.Services.AddSingleton<RuntimeConfig>();
+builder.Services.AddHostedService<GeneratorBackgroundService>();
 
 // Подключаем базу данных
 builder.Services.AddDbContext<AppDbContext>(options =>
