@@ -1,12 +1,10 @@
 namespace Service3.Proxy.Services;
 
-public class WeatherForecast
+public interface ITokenStore
 {
-    public DateOnly Date { get; set; }
+    int GetUsed(string key);
 
-    public int TemperatureC { get; set; }
+    bool TryAdd(string key, int limit, int amount);
 
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-
-    public string? Summary { get; set; }
+    void Reset(string key);
 }

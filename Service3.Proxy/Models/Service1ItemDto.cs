@@ -1,3 +1,5 @@
+using Service3.Proxy.Services
+
 namespace Service3.Proxy.Models;
 
 public class Service1ItemDto
