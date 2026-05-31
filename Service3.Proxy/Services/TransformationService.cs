@@ -64,6 +64,6 @@ public class TransformationService : ITransformationService
             count += item.PreciseValue.Length;
             count += item.TimestampIso.Length;
         }
-        return ñount;
+        return count;
     }
 }

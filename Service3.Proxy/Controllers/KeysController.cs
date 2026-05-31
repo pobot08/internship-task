@@ -1,32 +1,42 @@
 using Microsoft.AspNetCore.Mvc;
+using Service3.Proxy.Services;
 
 namespace Service3.Proxy.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("api/keys")]
 public class KeysController : ControllerBase
 {
-    private static readonly string[] Summaries = new[]
-    {
-        "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-    };
+    private readonly ITokenStore _tokenStore;
 
-    private readonly ILogger<KeysController> _logger;
-
-    public KeysController(ILogger<KeysController> logger)
+    public KeysController(
+        ITokenStore tokenStore)
     {
-        _logger = logger;
+        _tokenStore = tokenStore;
     }
 
-    [HttpGet(Name = "GetWeatherForecast")]
-    public IEnumerable<KeysController> Get()
+    [HttpGet("{key}/usage")]
+    public IActionResult Usage(string key)
     {
-        return Enumerable.Range(1, 5).Select(index => new KeysController
+        return Ok(new
         {
-            Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            TemperatureC = Random.Shared.Next(-20, 55),
-            Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-        })
-        .ToArray();
+            key,
+            used = _tokenStore.GetUsed(key)
+        });
+    }
+
+    [HttpPost("{key}/reset")]
+    public async Task<IActionResult> Reset(string key)
+    {
+        await Task.Delay(
+            Random.Shared.Next(2000, 5000));
+
+        _tokenStore.Reset(key);
+
+        return Ok(new
+        {
+            status = "reset",
+            key
+        });
     }
 }
