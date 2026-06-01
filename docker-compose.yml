@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
 
   postgres:
@@ -21,8 +19,8 @@ services:
 
   service1:
     build:
-      context: .
-      dockerfile: Service1.Generator/Dockerfile
+      context: ./Service1.Generator
+      dockerfile: Dockerfile
     container_name: service1
     ports:
       - "5001:8080"
