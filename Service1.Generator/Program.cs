@@ -2,15 +2,29 @@ using Microsoft.EntityFrameworkCore;
 using service1.Data;
 using service1.Models;
 using service1.Services;
+using Serilog;
+using Serilog.Formatting.Compact;
+
+// настраиваем Serilog до создания builder
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(new CompactJsonFormatter())
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// заменяем стандартное логирование на Serilog
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .WriteTo.Console(new CompactJsonFormatter()));
 
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<DataGenerator>();
-builder.Services.AddSingleton<RuntimeConfig>();
+var runtimeConfig = new RuntimeConfig();
+builder.Configuration.GetSection("Generator").Bind(runtimeConfig);
+builder.Services.AddSingleton(runtimeConfig);
 builder.Services.AddHostedService<GeneratorBackgroundService>();
 
 // Подключаем базу данных
@@ -36,4 +50,15 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthorization();
 app.MapControllers();
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Сервис упал при запуске");
+}
+finally
+{
+    Log.CloseAndFlush(); // убеждаемся что все логи записаны перед выходом
+}
