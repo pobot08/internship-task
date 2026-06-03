@@ -1,12 +1,10 @@
+using Service3.Proxy.Models;
+
 namespace Service3.Proxy.Services;
 
-public class WeatherForecast
+public interface ITransformationService
 {
-    public DateOnly Date { get; set; }
-
-    public int TemperatureC { get; set; }
-
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-
-    public string? Summary { get; set; }
+    List<TransformedItem> Transform(List<Service1ItemDto> items);
+    int CountTokens(List<TransformedItem> items);
 }
+

@@ -1,3 +1,5 @@
+using Service3.Proxy.Services;
+
 namespace Service3.Proxy.Models;
 
 public class Service1ItemDto
@@ -9,6 +11,8 @@ public class Service1ItemDto
     public int Value { get; set; }
 
     public decimal AdditionValue { get; set; }
+
+    public int YearValue { get; set; }
 
     public DateTime DataValue { get; set; }
 }

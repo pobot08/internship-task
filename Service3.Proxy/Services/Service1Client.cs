@@ -1,3 +1,4 @@
+using Service3.Proxy.Models;
 namespace Service3.Proxy.Services;
 
 public class Service1Client : IService1Client

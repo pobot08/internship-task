@@ -2,7 +2,7 @@ namespace Service3.Proxy.Models;
 
 public class TransformedItem
 {
-    public Guid Uid { get; set; }
+    public string Uid { get; set; } = string.Empty;
 
     public string PayloadHash { get; set; } = string.Empty;
 
