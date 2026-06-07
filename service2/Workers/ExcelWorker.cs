@@ -3,27 +3,37 @@ using RabbitMQ.Client.Events;
 using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
+using service2.Data;
 using service2.DTOs;
+using Microsoft.EntityFrameworkCore;
 
 namespace service2.Workers;
 
 public class ExcelWorker : BackgroundService
 {
     private readonly ILogger<ExcelWorker> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;  // Fix #2: нужен для записи пути в БД
+    private readonly IConfiguration _config;
     private readonly string _outputDirectory;
-    private RabbitMQ.Client.IModel? _channel;
+    private IModel? _channel;
     private IConnection? _connection;
 
-    public ExcelWorker(ILogger<ExcelWorker> logger, IConfiguration config)
+    public ExcelWorker(
+        ILogger<ExcelWorker> logger,
+        IServiceScopeFactory scopeFactory,
+        IConfiguration config)
     {
         _logger = logger;
-        // Читаем папку из конфига
-        _outputDirectory = config["Consumer:ExcelOutputDirectory"] ?? "C:/yaro/excel-output";
+        _scopeFactory = scopeFactory;
+        _config = config;
+        _outputDirectory = config["Consumer:ExcelOutputDirectory"] ?? "/data/excel";
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var factory = new ConnectionFactory { HostName = "rabbitmq" };
+        // Fix #3: читаем хост из конфига, не хардкодим
+        var host = _config["RabbitMQ:Host"] ?? "localhost";
+        var factory = new ConnectionFactory { HostName = host };
 
         for (int i = 0; i < 10; i++)
         {
@@ -34,14 +44,18 @@ public class ExcelWorker : BackgroundService
             }
             catch
             {
-                Console.WriteLine($"RabbitMQ недоступен, попытка {i + 1}/10...");
+                _logger.LogWarning("RabbitMQ недоступен, попытка {Attempt}/10...", i + 1);
                 Thread.Sleep(3000);
             }
         }
 
-        _channel = _connection.CreateModel(); 
+        // Fix #8: проверяем что подключение установлено
+        if (_connection == null)
+            throw new Exception("Не удалось подключиться к RabbitMQ после 10 попыток");
 
-        _channel.QueueDeclare(RabbitMqPublisher.ExcelQueueName, durable: true, exclusive: false, autoDelete: false);
+        _channel = _connection.CreateModel();
+        _channel.QueueDeclare(RabbitMqPublisher.ExcelQueueName,
+            durable: true, exclusive: false, autoDelete: false);
         _channel.BasicQos(0, 1, false);
 
         var consumer = new EventingBasicConsumer(_channel);
@@ -52,15 +66,16 @@ public class ExcelWorker : BackgroundService
 
             try
             {
-                // Десериализуем JSON в объект
-                var data = JsonSerializer.Deserialize<Service3Response>(message, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-                });
+                var data = JsonSerializer.Deserialize<Service3Response>(message,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+                    });
 
                 if (data != null)
                 {
-                    GenerateExcel(data);
+                    var filePath = GenerateExcel(data);
+                    await SaveFilePathToDbAsync(data.Envelope.SourceBatchId, filePath);
                 }
 
                 _channel.BasicAck(ea.DeliveryTag, false);
@@ -77,12 +92,10 @@ public class ExcelWorker : BackgroundService
         return Task.CompletedTask;
     }
 
-    private void GenerateExcel(Service3Response data)
+    private string GenerateExcel(Service3Response data)
     {
-        // Создаём папку если не существует
         Directory.CreateDirectory(_outputDirectory);
 
-        // Имя файла по заданию: batch_{id}_{дата}.xlsx
         var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
         var fileName = $"batch_{data.Envelope.SourceBatchId}_{timestamp}.xlsx";
         var filePath = Path.Combine(_outputDirectory, fileName);
@@ -92,17 +105,13 @@ public class ExcelWorker : BackgroundService
         // ===== Лист 1 — Envelope =====
         var sheet1 = workbook.Worksheets.Add("Envelope");
 
-        // Заголовки жирным
         sheet1.Cell(1, 1).Value = "source_batch_id";
         sheet1.Cell(1, 2).Value = "transformed_at";
         sheet1.Cell(1, 3).Value = "items_count";
         sheet1.Cell(1, 4).Value = "tokens_used";
         sheet1.Row(1).Style.Font.Bold = true;
-
-        // Заморозить первую строку
         sheet1.SheetView.FreezeRows(1);
 
-        // Данные
         sheet1.Cell(2, 1).Value = data.Envelope.SourceBatchId;
         sheet1.Cell(2, 2).Value = data.Envelope.TransformedAt.ToString("O");
         sheet1.Cell(2, 3).Value = data.Envelope.ItemsCount;
@@ -111,7 +120,6 @@ public class ExcelWorker : BackgroundService
         // ===== Лист 2 — Items =====
         var sheet2 = workbook.Worksheets.Add("Items");
 
-        // Заголовки жирным
         sheet2.Cell(1, 1).Value = "uid";
         sheet2.Cell(1, 2).Value = "payload_hash";
         sheet2.Cell(1, 3).Value = "payload";
@@ -119,15 +127,12 @@ public class ExcelWorker : BackgroundService
         sheet2.Cell(1, 5).Value = "precise_value";
         sheet2.Cell(1, 6).Value = "timestamp_iso";
         sheet2.Row(1).Style.Font.Bold = true;
-
-        // Заморозить первую строку
         sheet2.SheetView.FreezeRows(1);
 
-        // Данные — каждый item в отдельной строке
         for (int i = 0; i < data.Items.Count; i++)
         {
             var item = data.Items[i];
-            int row = i + 2; // начинаем со второй строки
+            int row = i + 2;
 
             sheet2.Cell(row, 1).Value = item.Uid;
             sheet2.Cell(row, 2).Value = item.PayloadHash;
@@ -139,13 +144,40 @@ public class ExcelWorker : BackgroundService
 
         workbook.SaveAs(filePath);
         _logger.LogInformation("Excel создан: {FilePath}", filePath);
+
+        return filePath;
     }
 
-    public override void Dispose()
+    // Fix #2: обновляем ExcelFilePath в БД после создания файла
+    private async Task SaveFilePathToDbAsync(string sourceBatchId, string filePath)
     {
-        _channel?.Dispose();
-        _connection?.Dispose();
-        base.Dispose();
+        // DatabaseWorker мог ещё не записать батч — делаем несколько попыток
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var batch = await db.Batches
+                .FirstOrDefaultAsync(b => b.SourceBatchId == sourceBatchId);
+
+            if (batch != null)
+            {
+                batch.ExcelFilePath = filePath;
+                await db.SaveChangesAsync();
+                _logger.LogInformation("ExcelFilePath сохранён для батча {BatchId}", sourceBatchId);
+                return;
+            }
+
+            // DatabaseWorker ещё не сохранил запись — ждём секунду
+            _logger.LogDebug(
+                "Батч {BatchId} ещё не в БД, попытка {Attempt}/5",
+                sourceBatchId, attempt + 1);
+            await Task.Delay(1000);
+        }
+
+        _logger.LogWarning(
+            "Не удалось сохранить ExcelFilePath для батча {BatchId}: запись не найдена",
+            sourceBatchId);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
@@ -153,5 +185,12 @@ public class ExcelWorker : BackgroundService
         _logger.LogInformation("ExcelWorker остановлен");
         _channel?.Close();
         await base.StopAsync(cancellationToken);
+    }
+
+    public override void Dispose()
+    {
+        _channel?.Dispose();
+        _connection?.Dispose();
+        base.Dispose();
     }
 }

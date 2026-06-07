@@ -29,30 +29,21 @@ public class DataController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get(
         [FromQuery] int count = 10,
-        [FromHeader(Name = "X-Api-Key")]
-        string apiKey = "")
+        [FromHeader(Name = "X-Api-Key")] string apiKey = "")
     {
-        var keyConfig =
-            _apiKeys.FirstOrDefault(x => x.Key == apiKey);
-
+        var keyConfig = _apiKeys.FirstOrDefault(x => x.Key == apiKey);
         if (keyConfig == null)
-        {
             return Unauthorized();
-        }
 
-        var sourceItems =
-            await _service1Client.GetLatestItemsAsync(count);
+        var (batchId, sourceItems) = await _service1Client.GetLatestBatchAsync(count);
 
-        var transformed =
-            _transformer.Transform(sourceItems);
+        if (batchId == Guid.Empty)
+            return StatusCode(503, new { error = "No data available from Service1" });
 
-        var tokens =
-            _transformer.CountTokens(transformed);
+        var transformed = _transformer.Transform(sourceItems);
+        var tokens = _transformer.CountTokens(transformed);
 
-        bool success = _tokenStore.TryAdd(
-            apiKey,
-            keyConfig.TokenLimit,
-            tokens);
+        bool success = _tokenStore.TryAdd(apiKey, keyConfig.TokenLimit, tokens);
 
         if (!success)
         {
@@ -68,15 +59,12 @@ public class DataController : ControllerBase
         {
             Envelope = new Envelope
             {
-                SourceBatchId = Guid.NewGuid().ToString(),
+                SourceBatchId = batchId,
                 TransformedAt = DateTime.UtcNow,
                 ItemsCount = transformed.Count,
                 TokensUsed = tokens,
-                TokensRemaining =
-                    keyConfig.TokenLimit -
-                    _tokenStore.GetUsed(apiKey)
+                TokensRemaining = keyConfig.TokenLimit - _tokenStore.GetUsed(apiKey)
             },
-
             Items = transformed
         };
 

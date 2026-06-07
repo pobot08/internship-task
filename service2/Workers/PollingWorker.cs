@@ -10,6 +10,11 @@ public class PollingWorker : BackgroundService
     private readonly IConfiguration _config;
     private readonly Random _random = new();
 
+    private static readonly System.Text.Json.JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower
+    };
+
     public PollingWorker(
         ILogger<PollingWorker> logger,
         Service3Client client,
@@ -43,7 +48,6 @@ public class PollingWorker : BackgroundService
 
     private async Task PollOnceAsync()
     {
-        // Случайный ключ из конфига
         var keys = _config.GetSection("Consumer:ApiKeys").Get<List<string>>() ?? new();
         if (keys.Count == 0)
         {
@@ -62,7 +66,7 @@ public class PollingWorker : BackgroundService
             var data = await _client.GetDataAsync(apiKey, count, correlationId);
             if (data != null)
             {
-                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                var json = System.Text.Json.JsonSerializer.Serialize(data, _jsonOptions);
                 _publisher.Publish(json);
                 _logger.LogInformation("Данные отправлены в очередь");
             }
@@ -72,14 +76,12 @@ public class PollingWorker : BackgroundService
             _logger.LogWarning("Превышен лимит токенов, сбрасываю ключ ...{Suffix}", ex.Key[^4..]);
             await _client.ResetKeyAsync(ex.Key);
 
-
             await Task.Delay(3000);
 
-            // Повторный запрос после сброса
             var data = await _client.GetDataAsync(ex.Key, count, correlationId);
             if (data != null)
             {
-                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                var json = System.Text.Json.JsonSerializer.Serialize(data, _jsonOptions);
                 _publisher.Publish(json);
             }
         }

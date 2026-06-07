@@ -2,6 +2,7 @@
 using RabbitMQ.Client.Events;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using service2.Data;
 using service2.DTOs;
 using service2.Models;
@@ -12,20 +13,25 @@ public class DatabaseWorker : BackgroundService
 {
     private readonly ILogger<DatabaseWorker> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private RabbitMQ.Client.IModel? _channel;
+    private readonly IConfiguration _config;
+    private IModel? _channel;
     private IConnection? _connection;
 
     public DatabaseWorker(
         ILogger<DatabaseWorker> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IConfiguration config)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _config = config;  // Fix #3: берём хост из конфига
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var factory = new ConnectionFactory { HostName = "rabbitmq" };
+        // Fix #3: читаем хост из конфига
+        var host = _config["RabbitMQ:Host"] ?? "localhost";
+        var factory = new ConnectionFactory { HostName = host };
 
         for (int i = 0; i < 10; i++)
         {
@@ -36,15 +42,18 @@ public class DatabaseWorker : BackgroundService
             }
             catch
             {
-                Console.WriteLine($"RabbitMQ недоступен, попытка {i + 1}/10...");
+                _logger.LogWarning("RabbitMQ недоступен, попытка {Attempt}/10...", i + 1);
                 Thread.Sleep(3000);
             }
         }
 
+        // Fix #8: явная проверка что подключение установлено
+        if (_connection == null)
+            throw new Exception("Не удалось подключиться к RabbitMQ после 10 попыток");
 
         _channel = _connection.CreateModel();
-
-        _channel.QueueDeclare(RabbitMqPublisher.DbQueueName, durable: true, exclusive: false, autoDelete: false);
+        _channel.QueueDeclare(RabbitMqPublisher.DbQueueName,
+            durable: true, exclusive: false, autoDelete: false);
         _channel.BasicQos(0, 1, false);
 
         var consumer = new EventingBasicConsumer(_channel);
@@ -55,15 +64,14 @@ public class DatabaseWorker : BackgroundService
 
             try
             {
-                var data = JsonSerializer.Deserialize<Service3Response>(message, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-                });
+                var data = JsonSerializer.Deserialize<Service3Response>(message,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+                    });
 
                 if (data != null)
-                {
                     await SaveToDatabaseAsync(data);
-                }
 
                 _channel.BasicAck(ea.DeliveryTag, false);
             }
@@ -84,22 +92,24 @@ public class DatabaseWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Идемпотентность — если батч уже есть в БД, пропускаем
-        var exists = db.Batches.Any(b => b.SourceBatchId == data.Envelope.SourceBatchId);
+        // Fix #10: используем асинхронный AnyAsync вместо синхронного Any
+        var exists = await db.Batches
+            .AnyAsync(b => b.SourceBatchId == data.Envelope.SourceBatchId);
+
         if (exists)
         {
-            _logger.LogWarning("Батч {BatchId} уже есть в БД, пропускаю", data.Envelope.SourceBatchId);
+            _logger.LogWarning("Батч {BatchId} уже есть в БД, пропускаю",
+                data.Envelope.SourceBatchId);
             return;
         }
 
-        // Создаём батч
         var batch = new ReceivedBatch
         {
             SourceBatchId = data.Envelope.SourceBatchId,
             TransformedAt = data.Envelope.TransformedAt,
             ItemsCount = data.Envelope.ItemsCount,
             TokensUsed = data.Envelope.TokensUsed,
-            // Сохраняем все items
+            ReceivedAt = DateTime.UtcNow,
             Items = data.Items.Select(i => new ReceivedItem
             {
                 Uid = i.Uid,
@@ -117,17 +127,17 @@ public class DatabaseWorker : BackgroundService
         _logger.LogInformation("Батч {BatchId} сохранён в БД", data.Envelope.SourceBatchId);
     }
 
-    public override void Dispose()
-    {
-        _channel?.Dispose();
-        _connection?.Dispose();
-        base.Dispose();
-    }
-
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("DatabaseWorker остановлен");
         _channel?.Close();
         await base.StopAsync(cancellationToken);
+    }
+
+    public override void Dispose()
+    {
+        _channel?.Dispose();
+        _connection?.Dispose();
+        base.Dispose();
     }
 }
