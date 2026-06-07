@@ -23,9 +23,23 @@ public class ExcelWorker : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var factory = new ConnectionFactory { HostName = "localhost" };
-        _connection = factory.CreateConnection();
-        _channel = _connection.CreateModel();
+        var factory = new ConnectionFactory { HostName = "rabbitmq" };
+
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                _connection = factory.CreateConnection();
+                break;
+            }
+            catch
+            {
+                Console.WriteLine($"RabbitMQ недоступен, попытка {i + 1}/10...");
+                Thread.Sleep(3000);
+            }
+        }
+
+        _channel = _connection.CreateModel(); 
 
         _channel.QueueDeclare(RabbitMqPublisher.ExcelQueueName, durable: true, exclusive: false, autoDelete: false);
         _channel.BasicQos(0, 1, false);

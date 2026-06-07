@@ -1,45 +1,95 @@
-﻿using DocumentFormat.OpenXml.Bibliography;
-using service2.Services;
+﻿using service2.Services;
 
+namespace service2.Workers;
 
-namespace service2.Workers
+public class PollingWorker : BackgroundService
 {
-    public class PollingWorker : BackgroundService
+    private readonly ILogger<PollingWorker> _logger;
+    private readonly Service3Client _client;
+    private readonly RabbitMqPublisher _publisher;
+    private readonly IConfiguration _config;
+    private readonly Random _random = new();
+
+    public PollingWorker(
+        ILogger<PollingWorker> logger,
+        Service3Client client,
+        RabbitMqPublisher publisher,
+        IConfiguration config)
     {
+        _logger = logger;
+        _client = client;
+        _publisher = publisher;
+        _config = config;
+    }
 
-        private readonly ILogger<PollingWorker> _logger;
-        private readonly Service3Client _client;
-        private readonly RabbitMqPublisher _publisher;
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Опрос Service3 запущен");
 
-        public PollingWorker(ILogger<PollingWorker> logger, Service3Client client, RabbitMqPublisher publisher)
+        try
         {
-            _logger = logger;
-            _client = client;
-            _publisher = publisher;
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await PollOnceAsync();
+                var interval = _config.GetValue<int>("Consumer:PollIntervalSeconds", 60);
+                await Task.Delay(TimeSpan.FromSeconds(interval), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("PollingWorker остановлен");
+        }
+    }
+
+    private async Task PollOnceAsync()
+    {
+        // Случайный ключ из конфига
+        var keys = _config.GetSection("Consumer:ApiKeys").Get<List<string>>() ?? new();
+        if (keys.Count == 0)
+        {
+            _logger.LogWarning("Нет API ключей в конфиге");
+            return;
         }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        var apiKey = keys[_random.Next(keys.Count)];
+        var correlationId = Guid.NewGuid().ToString();
+        var count = _config.GetValue<int>("Consumer:ItemsPerRequest", 50);
+
+        _logger.LogInformation("Опрашиваю Service3. CorrelationId={CorrelationId}", correlationId);
+
+        try
         {
-            _logger.LogInformation("Опрос Service3 запущен");
-
-            try
+            var data = await _client.GetDataAsync(apiKey, count, correlationId);
+            if (data != null)
             {
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogInformation("Делаю запрос к Service3...");
-
-                    var data = await _client.GetDataAsync();
-                    _publisher.Publish(data);
-
-                    _logger.LogInformation("Данные отправлены в очередь");
-
-                    await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
-                }
+                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                _publisher.Publish(json);
+                _logger.LogInformation("Данные отправлены в очередь");
             }
-            catch (OperationCanceledException)
+        }
+        catch (TokenLimitExceededException ex)
+        {
+            _logger.LogWarning("Превышен лимит токенов, сбрасываю ключ ...{Suffix}", ex.Key[^4..]);
+            await _client.ResetKeyAsync(ex.Key);
+
+
+            await Task.Delay(3000);
+
+            // Повторный запрос после сброса
+            var data = await _client.GetDataAsync(ex.Key, count, correlationId);
+            if (data != null)
             {
-                _logger.LogInformation("PollingWorker остановлен");
+                var json = System.Text.Json.JsonSerializer.Serialize(data);
+                _publisher.Publish(json);
             }
+        }
+        catch (UnauthorizedException ex)
+        {
+            _logger.LogError("Ключ ...{Suffix} не авторизован", ex.Key[^4..]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при опросе Service3");
         }
     }
 }

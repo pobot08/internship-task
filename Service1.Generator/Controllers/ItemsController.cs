@@ -23,14 +23,11 @@ namespace service1.Controllers
             if (count < 1) count = 1;
             if (count > 1000) count = 1000;
 
-            // загружаем последние батчи из БД
             var batches = await _db.Batches
                 .OrderByDescending(b => b.GeneratedAt)
-                .Take(50) // берём последние 50 батчей с запасом
+                .Take(count) // берём ровно столько батчей сколько запросили объектов
                 .ToListAsync();
 
-            // из батчей достаём Items, объединяем в один список
-            // SelectMany — разворачивает список списков в один список
             var items = batches
                 .SelectMany(b => b.Items)
                 .OrderByDescending(i => i.DataValue)

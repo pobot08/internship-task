@@ -28,7 +28,7 @@ namespace service2
                 builder.Services.AddDbContext<AppDbContext>(opt =>
                     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-                builder.Services.AddSingleton<Service3Client>();
+                builder.Services.AddHttpClient<Service3Client>();
                 builder.Services.AddSingleton<RabbitMqPublisher>();
 
                 builder.Services.AddHostedService<PollingWorker>();
@@ -43,6 +43,13 @@ namespace service2
                 builder.Services.AddSwaggerGen();
 
                 var app = builder.Build();
+
+                // Автоматически создаём БД и применяем миграции при старте
+                using (var scope = app.Services.CreateScope())
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    db.Database.Migrate();
+                }
 
                 if (app.Environment.IsDevelopment())
                 {

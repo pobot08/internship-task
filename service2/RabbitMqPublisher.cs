@@ -12,14 +12,31 @@ namespace service2
         public const string DbQueueName = "batch-db";
         public const string ExcelQueueName = "batch-excel";
 
-        public RabbitMqPublisher()
+        public RabbitMqPublisher(IConfiguration config)
         {
-            var factory = new ConnectionFactory { HostName = "localhost" };
-            _connection = factory.CreateConnection();
-            _channel = _connection.CreateModel();
+            var host = config["RabbitMQ:Host"] ?? "localhost";
 
-            _channel.QueueDeclare(DbQueueName, durable: true, exclusive: false, autoDelete: false);
-            _channel.QueueDeclare(ExcelQueueName, durable: true, exclusive: false, autoDelete: false);
+            var factory = new ConnectionFactory { HostName = host };
+
+            // Пробуем подключиться несколько раз
+            for (int i = 0; i < 10; i++)
+            {
+                try
+                {
+                    _connection = factory.CreateConnection();
+                    _channel = _connection.CreateModel();
+                    _channel.QueueDeclare(DbQueueName, durable: true, exclusive: false, autoDelete: false);
+                    _channel.QueueDeclare(ExcelQueueName, durable: true, exclusive: false, autoDelete: false);
+                    return; // успешно подключились
+                }
+                catch
+                {
+                    Console.WriteLine($"RabbitMQ недоступен, попытка {i + 1}/10...");
+                    Thread.Sleep(3000); // ждём 3 секунды
+                }
+            }
+
+            throw new Exception("Не удалось подключиться к RabbitMQ");
         }
 
         public void Publish(string data)

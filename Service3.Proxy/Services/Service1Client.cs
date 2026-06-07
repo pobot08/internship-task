@@ -17,11 +17,10 @@ public class Service1Client : IService1Client
 
         response.EnsureSuccessStatusCode();
 
-        var data = await response.Content.ReadFromJsonAsync<List<Service1ItemDto>>();
+        var data = await response.Content
+        .ReadFromJsonAsync<LatestItemsResponse>();
 
-        if (data == null)
-            return new List<Service1ItemDto>();
-        else return data;
+        return data?.Items ?? [];
     }
 }
 

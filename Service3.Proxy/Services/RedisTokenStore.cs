@@ -23,6 +23,9 @@ public class RedisTokenStore : ITokenStore
     {
         int current = GetUsed(key);
 
+        Console.WriteLine(
+            $"TRYADD key={key} current={current} amount={amount} limit={limit}");
+
         if (current + amount > limit)
             return false;
 
@@ -33,7 +36,11 @@ public class RedisTokenStore : ITokenStore
 
     public void Reset(string key)
     {
+
         _db.StringSet(GetRedisKey(key), 0);
+
+        Console.WriteLine(
+        $"RESET {key} -> {_db.StringGet(GetRedisKey(key))}");
     }
 
     private static string GetRedisKey(string apiKey)

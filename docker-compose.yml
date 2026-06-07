@@ -1,5 +1,4 @@
 services:
-
   postgres:
     image: postgres:16
     container_name: postgres
@@ -15,6 +14,29 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   service1:
@@ -35,5 +57,48 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  service3:
+    build:
+      context: ./Service3.Proxy
+      dockerfile: Dockerfile
+    container_name: service3
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Service1__BaseUrl=http://service1:8080
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      service1:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  service2:
+    build:
+      context: ./service2
+      dockerfile: Dockerfile
+    container_name: service2
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=consumer_db;Username=postgres;Password=postgres
+      - Consumer__Service3Url=http://service3:8080
+      - Consumer__ExcelOutputDirectory=/data/excel
+      - RabbitMQ__Host=rabbitmq
+    volumes:
+      - excel_data:/data/excel
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      service3:
+        condition: service_started
+    restart: on-failure
+
 volumes:
   postgres_data:
+  excel_data:
