@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace service1.Services
 {
-    // BackgroundService — базовый класс ASP.NET для фоновых задач
     public class GeneratorBackgroundService : BackgroundService
     {
         private readonly DataGenerator _generator;
@@ -12,9 +11,6 @@ namespace service1.Services
         private readonly ILogger<GeneratorBackgroundService> _logger;
         private readonly RuntimeConfig _runtimeConfig;
 
-        // IServiceScopeFactory — фабрика для создания scope
-        // нужна потому что DbContext нельзя использовать напрямую в фоновом сервисе
-        // (объясню ниже почему)
         public GeneratorBackgroundService(
             DataGenerator generator,
             IServiceScopeFactory scopeFactory,
@@ -28,7 +24,6 @@ namespace service1.Services
         }
 
         // этот метод запускается автоматически когда сервис стартует
-        // CancellationToken — сигнал остановки (graceful shutdown)
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Генератор запущен");
@@ -58,7 +53,6 @@ namespace service1.Services
 
         private async Task GenerateAndSaveAsync()
         {
-            // читаем настройки из конфигурации
             var minItems = _runtimeConfig.MinItems;
             var maxItems = _runtimeConfig.MaxItems;
 
@@ -68,8 +62,6 @@ namespace service1.Services
                 "Сгенерирован батч {BatchId} с {Count} объектами",
                 batch.BatchId, batch.ItemsCount);
 
-            // создаём scope чтобы получить DbContext
-            // scope — это как временный контейнер для сервисов
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 

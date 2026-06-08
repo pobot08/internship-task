@@ -128,19 +128,16 @@ namespace Service1.Generator.Tests
         public void GenerateItem_AdditionValue_HasTenDecimalPlaces()
         {
             var batch = _generator.GenerateBatch(10, 20);
-
             foreach (var item in batch.Items)
             {
-                // получаем строку числа и считаем знаки после запятой
-                string valueStr = item.AdditionValue.ToString();
-                int decimalPlaces = 0;
+                // ToString с инвариантной культурой — всегда точка как разделитель
+                string valueStr = item.AdditionValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                int dotIndex = valueStr.IndexOf('.');
+                int decimalPlaces = dotIndex == -1 ? 0 : valueStr.Length - dotIndex - 1;
 
-                if (valueStr.Contains('.'))
-                    decimalPlaces = valueStr.Length - valueStr.IndexOf('.') - 1;
-
-                Assert.IsTrue(
-                    decimalPlaces <= 10,
-                    $"AdditionValue имеет {decimalPlaces} знаков после запятой, максимум 10");
+                Assert.AreEqual(10, decimalPlaces,
+                    $"AdditionValue должен иметь ровно 10 знаков после запятой, " +
+                    $"получили {decimalPlaces}: {valueStr}");
             }
         }
 
